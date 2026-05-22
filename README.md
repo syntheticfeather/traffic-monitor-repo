@@ -2,53 +2,71 @@
 
 基于 OpenWrt 的网络流量实时监控与防火墙管理系统。
 
-## 文件说明
-
-| 文件 | 说明 |
-|------|------|
-| `src/monitor.c` | C 程序主文件 — libpcap 抓包 + 线程管理 |
-| `src/hash.c` | 哈希表 + 流结点管理 |
-| `src/hash.h` | 数据结构定义 + 函数声明 |
-| `src/server.py` | Python 后端 — HTTP API |
-| `compile.sh` | 交叉编译脚本 |
-| `前端API文档.md` | 前端接口文档 |
-| `实验环境配置记录.md` | OpenWrt 部署配置记录 |
-| `AI使用记录-完整交互.md` | AI 辅助开发过程记录 |
-| `测试记录-traffic-monitor.md` | 功能测试记录 |
-
-## 运行环境
-
-- **C 程序**：OpenWrt 24.10 (x86_64)，通过交叉编译部署
-- **后端**：Python 3.11+，Windows / Linux，端口 8080
-- **编译**：WSL Ubuntu + OpenWrt Toolchain
-
-## 架构
+## 项目结构
 
 ```
-OpenWrt 虚拟机
-  ├── monitor (C) — libpcap 抓包 → stats.txt
-  ├── Samba 共享 /mnt/p0
-  └── firewall.sh — 防火墙脚本
-
-Windows 宿主机
-  ├── server.py — 读 Samba stats.txt → JSON API
-  └── 编译：WSL + OpenWrt Toolchain
-
-前端（队友开发）
-  └── 调 /api/stats + /api/firewall/*
+├── src/
+│   ├── monitor.c     # C 主程序（libpcap 抓包 + 线程管理）
+│   ├── hash.c / .h   # 哈希表 + 流结点管理
+│   └── server.py     # Python Web 后端（HTTP API）
+├── libpcap-1.10.5.tar.gz  # libpcap 源码（编译依赖）
+├── build.sh          # 首次完整构建（交叉编译 libpcap + monitor）
+├── compile.sh        # 快速重编（只编 monitor）
+├── 前端API文档.md
+├── 实验环境配置记录.md
+├── AI使用记录-完整交互.md
+└── 测试记录-traffic-monitor.md
 ```
 
-## 编译
+## 环境准备
+
+### 交叉编译工具链（WSL / Linux）
+
+下载到本项目**上级目录**：
 
 ```bash
+wget https://downloads.openwrt.org/releases/24.10.0/targets/x86/64/openwrt-toolchain-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+tar --zstd -xf openwrt-toolchain-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst -C ..
+```
+
+WSL 中安装构建依赖：
+
+```bash
+sudo apt install bison flex zstd build-essential
+```
+
+### OpenWrt 运行环境
+
+- OpenWrt 24.10 (x86_64) 虚拟机
+- `opkg install luci-app-samba4` — 文件共享
+- `opkg install libpcap` — 运行时依赖
+
+## 构建
+
+```bash
+# 首次（含 libpcap 交叉编译）
+bash build.sh
+
+# 只修改 C 代码后
 bash compile.sh
-# 输出：src/monitor（静态链接 musl 二进制）
 ```
 
-## 启动后端
+输出：`src/monitor`（静态链接 musl 二进制，可直接在 OpenWrt 上运行）
 
-```cmd
-python src/server.py
-```
+## 运行
 
-浏览器访问 `http://localhost:8080/api/stats`。
+1. 部署到 OpenWrt：`cat src/monitor | ssh root@192.168.6.100 'cat > /mnt/p0/traffic_monitor/monitor && chmod +x /mnt/p0/traffic_monitor/monitor'`
+2. OpenWrt 上：`cd /mnt/p0/traffic_monitor && ./monitor &`
+3. Windows 上：`python src/server.py`
+4. 接口：`http://localhost:8080/api/stats`
+
+## API
+
+详见 [前端API文档.md](前端API文档.md)
+
+| 接口 | 方法 | 用途 |
+|------|------|------|
+| `/api/stats` | GET | 流量数据 JSON |
+| `/api/firewall/list` | GET | 防火墙规则列表 |
+| `/api/firewall/add` | POST | 添加规则 |
+| `/api/firewall/del` | POST | 删除规则 |
