@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "hash.h"
 #include <pcap.h>
 #include <netinet/ip.h>

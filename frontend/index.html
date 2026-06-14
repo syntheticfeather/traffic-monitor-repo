@@ -1,1046 +1,1315 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>网络流量监控与防火墙管理</title>
-<!-- Chart.js: 国内 CDN 优先，jsdelivr 作为备用 -->
-<script src="https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"
-        onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';document.head.appendChild(s);">
-</script>
-<style>
-/* ========== CSS 变量与基础 ========== */
-:root {
-  --bg: #f0f2f5;
-  --card-bg: #ffffff;
-  --primary: #1a73e8;
-  --primary-hover: #1557b0;
-  --danger: #d93025;
-  --danger-hover: #b3261e;
-  --success: #188038;
-  --warning: #e8710a;
-  --text: #202124;
-  --text-secondary: #5f6368;
-  --border: #e0e0e0;
-  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.1);
-  --radius: 8px;
-}
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>网络流量监控与防火墙管理</title>
+  <!-- Chart.js: 本地文件立即加载，CDN 作为备用 -->
+  <script src="chart.umd.min.js"></script>
+  <script>
+    // 如果本地文件加载失败（例如文件被移动），fallback 到 CDN
+    if (typeof Chart === 'undefined') {
+      var cs = document.createElement('script');
+      cs.src = 'https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.0/chart.umd.min.js';
+      cs.onerror = function () {
+        var cs2 = document.createElement('script');
+        cs2.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+        document.head.appendChild(cs2);
+      };
+      document.head.appendChild(cs);
+    }
+  </script>
+  <style>
+    /* ========== CSS 变量与基础 ========== */
+    :root {
+      --bg: #f0f2f5;
+      --card-bg: #ffffff;
+      --primary: #1a73e8;
+      --primary-hover: #1557b0;
+      --danger: #d93025;
+      --danger-hover: #b3261e;
+      --success: #188038;
+      --warning: #e8710a;
+      --text: #202124;
+      --text-secondary: #5f6368;
+      --border: #e0e0e0;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+      --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.1);
+      --radius: 8px;
+    }
 
-/* ========== 头部 ========== */
-header {
-  background: linear-gradient(135deg, #1a237e 0%, #283593 40%, #1a73e8 100%);
-  color: white;
-  padding: 16px 32px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-}
-header h1 {
-  font-size: 1.35rem;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-}
-header .subtitle {
-  font-size: 0.8rem;
-  opacity: 0.8;
-  font-weight: 400;
-}
-.server-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-}
-.status-dot {
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  background: #f44336;
-  animation: pulse 2s infinite;
-}
-.status-dot.connected {
-  background: #4caf50;
-  animation: none;
-}
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-/* ========== 布局 ========== */
-.container {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 0 24px;
-}
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
 
-/* ========== 标签页导航 ========== */
-.tab-nav {
-  display: flex;
-  gap: 0;
-  margin: 24px 0 0;
-  border-bottom: 2px solid var(--border);
-}
-.tab-btn {
-  padding: 12px 28px;
-  border: none;
-  background: none;
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  cursor: pointer;
-  position: relative;
-  transition: color 0.2s;
-  outline: none;
-}
-.tab-btn:hover { color: var(--primary); }
-.tab-btn.active {
-  color: var(--primary);
-  font-weight: 600;
-}
-.tab-btn.active::after {
-  content: '';
-  position: absolute;
-  bottom: -2px; left: 0; right: 0;
-  height: 3px;
-  background: var(--primary);
-  border-radius: 3px 3px 0 0;
-}
-.tab-icon { margin-right: 6px; }
+    /* ========== 头部 ========== */
+    header {
+      background: linear-gradient(135deg, #1a237e 0%, #283593 40%, #1a73e8 100%);
+      color: white;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
 
-/* ========== 面板 ========== */
-.tab-panel { display: none; padding: 24px 0; }
-.tab-panel.active { display: block; }
+    header h1 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
 
-/* ========== 卡片 ========== */
-.card {
-  background: var(--card-bg);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 20px 24px;
-  margin-bottom: 20px;
-  border: 1px solid var(--border);
-}
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
-}
-.card-header h2 {
-  font-size: 1.05rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.card-header h2 .icon {
-  font-size: 1.2rem;
-}
+    header .subtitle {
+      font-size: 0.8rem;
+      opacity: 0.8;
+      font-weight: 400;
+    }
 
-/* ========== 统计卡片组 ========== */
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
-}
-.stat-card {
-  background: var(--card-bg);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 16px 20px;
-  border-left: 4px solid var(--primary);
-  display: flex;
-  flex-direction: column;
-}
-.stat-card:nth-child(2) { border-left-color: #0d904f; }
-.stat-card:nth-child(3) { border-left-color: var(--warning); }
-.stat-card:nth-child(4) { border-left-color: #7b1fa2; }
-.stat-label {
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
-}
-.stat-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.stat-unit {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-weight: 400;
-}
+    .server-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+    }
 
-/* ========== 刷新控制栏 ========== */
-.control-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.btn {
-  padding: 8px 18px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.15s;
-  background: white;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.btn:hover { box-shadow: var(--shadow); }
-.btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
-.btn-primary:hover { background: var(--primary-hover); }
-.btn-danger { background: var(--danger); color: white; border-color: var(--danger); }
-.btn-danger:hover { background: var(--danger-hover); }
-.btn-sm { padding: 5px 12px; font-size: 0.78rem; }
-.auto-badge {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  background: #e8f5e9;
-  color: #2e7d32;
-}
-.auto-badge.stopped { background: #fce4ec; color: #c62828; }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #f44336;
+      animation: pulse 2s infinite;
+    }
 
-/* ========== 表格 ========== */
-.table-wrap {
-  overflow-x: auto;
-  max-height: 450px;
-  overflow-y: auto;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-thead {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-th {
-  background: #f8f9fa;
-  padding: 10px 12px;
-  text-align: left;
-  font-weight: 600;
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  border-bottom: 2px solid var(--border);
-  white-space: nowrap;
-  cursor: pointer;
-  user-select: none;
-}
-th:hover { color: var(--primary); }
-td {
-  padding: 9px 12px;
-  border-bottom: 1px solid #f0f0f0;
-  white-space: nowrap;
-}
-tr:hover td { background: #f5f8ff; }
-tr.new-row td { background: #e8f0fe; animation: highlightRow 2s ease-out; }
-@keyframes highlightRow {
-  from { background: #c6dafc; }
-  to { background: transparent; }
-}
-.flow-dir {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 0.7rem;
-  font-weight: 600;
-}
-.flow-dir.out { background: #e3f2fd; color: #1565c0; }
-.flow-dir.in { background: #fce4ec; color: #c62828; }
-.flow-dir.internal { background: #f3e5f5; color: #7b1fa2; }
-.no-data {
-  text-align: center;
-  padding: 60px 20px;
-  color: var(--text-secondary);
-}
-.no-data .big-icon { font-size: 3rem; display: block; margin-bottom: 12px; }
+    .status-dot.connected {
+      background: #4caf50;
+      animation: none;
+    }
 
-/* ========== 图表 ========== */
-.chart-container {
-  position: relative;
-  height: 320px;
-  width: 100%;
-}
-canvas { width: 100% !important; }
+    @keyframes pulse {
 
-/* ========== 表单 ========== */
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
-}
-.form-group { display: flex; flex-direction: column; gap: 4px; }
-.form-group label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-.form-group input, .form-group select {
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 0.9rem;
-  transition: border-color 0.15s;
-  font-family: inherit;
-}
-.form-group input:focus, .form-group select:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(26,115,232,0.12);
-}
-.form-group .hint {
-  font-size: 0.72rem;
-  color: var(--text-secondary);
-}
-.form-actions {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
+      0%,
+      100% {
+        opacity: 1;
+      }
 
-/* ========== 消息提示 ========== */
-.message {
-  padding: 12px 16px;
-  border-radius: 6px;
-  margin-top: 12px;
-  font-size: 0.85rem;
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  animation: slideIn 0.25s ease-out;
-}
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.message.success { background: #e8f5e9; border: 1px solid #a5d6a7; color: #1b5e20; }
-.message.error { background: #fce4ec; border: 1px solid #ef9a9a; color: #b71c1c; }
-.message.info { background: #e3f2fd; border: 1px solid #90caf9; color: #0d47a1; }
-.message .msg-icon { font-size: 1.1rem; flex-shrink: 0; }
+      50% {
+        opacity: 0.4;
+      }
+    }
 
-/* ========== 规则列表 ========== */
-.rule-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  margin-bottom: 8px;
-  transition: box-shadow 0.15s;
-}
-.rule-card:hover { box-shadow: var(--shadow); }
-.rule-info { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.rule-badge {
-  padding: 3px 10px;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  font-family: monospace;
-}
-.rule-badge.accept { background: #e8f5e9; color: #2e7d32; }
-.rule-badge.drop { background: #fce4ec; color: #c62828; }
-.rule-badge.reject { background: #fff3e0; color: #e65100; }
-.rule-text {
-  font-size: 0.83rem;
-  font-family: "SF Mono", "Consolas", "Monaco", monospace;
-  color: var(--text);
-}
-.rule-id {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  font-family: monospace;
-}
+    /* ========== 布局 ========== */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
 
-/* ========== 响应式 ========== */
-@media (max-width: 768px) {
-  header { padding: 12px 16px; }
-  header h1 { font-size: 1.1rem; }
-  .container { padding: 0 12px; }
-  .tab-btn { padding: 10px 16px; font-size: 0.85rem; }
-  .form-grid { grid-template-columns: 1fr; }
-  .stat-grid { grid-template-columns: repeat(2, 1fr); }
-  .chart-container { height: 250px; }
-}
-</style>
+    /* ========== 标签页导航 ========== */
+    .tab-nav {
+      display: flex;
+      gap: 0;
+      margin: 24px 0 0;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .tab-btn {
+      padding: 12px 28px;
+      border: none;
+      background: none;
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      position: relative;
+      transition: color 0.2s;
+      outline: none;
+    }
+
+    .tab-btn:hover {
+      color: var(--primary);
+    }
+
+    .tab-btn.active {
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--primary);
+      border-radius: 3px 3px 0 0;
+    }
+
+    .tab-icon {
+      margin-right: 6px;
+    }
+
+    /* ========== 面板 ========== */
+    .tab-panel {
+      display: none;
+      padding: 24px 0;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    /* ========== 卡片 ========== */
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-header h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-header h2 .icon {
+      font-size: 1.2rem;
+    }
+
+    /* ========== 统计卡片组 ========== */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px 20px;
+      border-left: 4px solid var(--primary);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-card:nth-child(2) {
+      border-left-color: #0d904f;
+    }
+
+    .stat-card:nth-child(3) {
+      border-left-color: var(--warning);
+    }
+
+    .stat-card:nth-child(4) {
+      border-left-color: #7b1fa2;
+    }
+
+    .stat-label {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-unit {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      font-weight: 400;
+    }
+
+    /* ========== 刷新控制栏 ========== */
+    .control-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 8px 18px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.15s;
+      background: white;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      box-shadow: var(--shadow);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+      border-color: var(--danger);
+    }
+
+    .btn-danger:hover {
+      background: var(--danger-hover);
+    }
+
+    .btn-sm {
+      padding: 5px 12px;
+      font-size: 0.78rem;
+    }
+
+    .auto-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .auto-badge.stopped {
+      background: #fce4ec;
+      color: #c62828;
+    }
+
+    /* ========== 表格 ========== */
+    .table-wrap {
+      overflow-x: auto;
+      max-height: 450px;
+      overflow-y: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    thead {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    th {
+      background: #f8f9fa;
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      border-bottom: 2px solid var(--border);
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    th:hover {
+      color: var(--primary);
+    }
+
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid #f0f0f0;
+      white-space: nowrap;
+    }
+
+    tr:hover td {
+      background: #f5f8ff;
+    }
+
+    tr.new-row td {
+      background: #e8f0fe;
+      animation: highlightRow 2s ease-out;
+    }
+
+    @keyframes highlightRow {
+      from {
+        background: #c6dafc;
+      }
+
+      to {
+        background: transparent;
+      }
+    }
+
+    .flow-dir {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .flow-dir.out {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+
+    .flow-dir.in {
+      background: #fce4ec;
+      color: #c62828;
+    }
+
+    .flow-dir.internal {
+      background: #f3e5f5;
+      color: #7b1fa2;
+    }
+
+    .no-data {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+    }
+
+    .no-data .big-icon {
+      font-size: 3rem;
+      display: block;
+      margin-bottom: 12px;
+    }
+
+    /* ========== 图表 ========== */
+    .chart-container {
+      position: relative;
+      height: 320px;
+      width: 100%;
+    }
+
+    canvas {
+      width: 100% !important;
+    }
+
+    /* ========== 表单 ========== */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .form-group label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .form-group input,
+    .form-group select {
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.9rem;
+      transition: border-color 0.15s;
+      font-family: inherit;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.12);
+    }
+
+    .form-group .hint {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    /* ========== 消息提示 ========== */
+    .message {
+      padding: 12px 16px;
+      border-radius: 6px;
+      margin-top: 12px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      animation: slideIn 0.25s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .message.success {
+      background: #e8f5e9;
+      border: 1px solid #a5d6a7;
+      color: #1b5e20;
+    }
+
+    .message.error {
+      background: #fce4ec;
+      border: 1px solid #ef9a9a;
+      color: #b71c1c;
+    }
+
+    .message.info {
+      background: #e3f2fd;
+      border: 1px solid #90caf9;
+      color: #0d47a1;
+    }
+
+    .message .msg-icon {
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+
+    /* ========== 规则列表 ========== */
+    .rule-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 8px;
+      transition: box-shadow 0.15s;
+    }
+
+    .rule-card:hover {
+      box-shadow: var(--shadow);
+    }
+
+    .rule-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .rule-badge {
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      font-family: monospace;
+    }
+
+    .rule-badge.accept {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .rule-badge.drop {
+      background: #fce4ec;
+      color: #c62828;
+    }
+
+    .rule-badge.reject {
+      background: #fff3e0;
+      color: #e65100;
+    }
+
+    .rule-text {
+      font-size: 0.83rem;
+      font-family: "SF Mono", "Consolas", "Monaco", monospace;
+      color: var(--text);
+    }
+
+    .rule-id {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      font-family: monospace;
+    }
+
+    /* ========== 响应式 ========== */
+    @media (max-width: 768px) {
+      header {
+        padding: 12px 16px;
+      }
+
+      header h1 {
+        font-size: 1.1rem;
+      }
+
+      .container {
+        padding: 0 12px;
+      }
+
+      .tab-btn {
+        padding: 10px 16px;
+        font-size: 0.85rem;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stat-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .chart-container {
+        height: 250px;
+      }
+    }
+  </style>
 </head>
+
 <body>
 
-<!-- ==================== 头部 ==================== -->
-<header>
-  <div>
-    <h1>&#128737;&#65039; 网络流量监控与防火墙管理</h1>
-    <div class="subtitle">计算机网络系统 · 实验二 · Web 管理界面</div>
+  <!-- ==================== 头部 ==================== -->
+  <header>
+    <div>
+      <h1>&#128737;&#65039; 网络流量监控与防火墙管理</h1>
+      <div class="subtitle">计算机网络系统 · 实验二 · Web 管理界面</div>
+    </div>
+    <div class="server-status">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">检测中…</span>
+      <span style="margin-left:12px;opacity:0.7">API: <code id="apiUrl">--</code></span>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- ==================== 标签导航 ==================== -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="traffic">
+        <span class="tab-icon">&#128202;</span> 流量监控
+      </button>
+      <button class="tab-btn" data-tab="firewall">
+        <span class="tab-icon">&#128737;&#65039;</span> 防火墙配置
+      </button>
+    </nav>
+
+    <!-- ==================== 流量监控面板 ==================== -->
+    <section class="tab-panel active" id="panel-traffic">
+
+      <!-- 统计概览 -->
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-label">活跃连接数</span>
+          <span class="stat-value" id="statFlows">0</span>
+          <span class="stat-unit">条数据流</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">累计总流量</span>
+          <span class="stat-value" id="statTotal">0 B</span>
+          <span class="stat-unit">所有流合计</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">峰值速率</span>
+          <span class="stat-value" id="statPeak">0 B/s</span>
+          <span class="stat-unit">全局历史最高</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">最后更新</span>
+          <span class="stat-value" id="statUpdate" style="font-size:1rem;">--</span>
+          <span class="stat-unit">自动刷新中</span>
+        </div>
+      </div>
+
+      <!-- 数据表格 -->
+      <div class="card">
+        <div class="card-header">
+          <h2><span class="icon">&#128203;</span>实时流量数据表</h2>
+          <div class="control-bar">
+            <span class="auto-badge" id="autoBadge">&#9679; 自动刷新 2s</span>
+            <button class="btn btn-sm" id="btnToggleAuto" title="暂停/恢复自动刷新">&#9199;&#65039; 暂停</button>
+            <button class="btn btn-sm btn-primary" id="btnRefresh" title="立即刷新数据">&#128259; 立即刷新</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>方向</th>
+                <th>源 IP:端口</th>
+                <th>目标 IP:端口</th>
+                <th>累计流量</th>
+                <th>2s 速率</th>
+                <th>10s 速率</th>
+                <th>40s 速率</th>
+                <th>历史峰值</th>
+              </tr>
+            </thead>
+            <tbody id="flowTableBody">
+              <tr>
+                <td colspan="8" class="no-data"><span class="big-icon">&#128225;</span>等待数据…<br><small>请确保后端 API
+                    已启动</small></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 图表 -->
+      <div class="card">
+        <div class="card-header">
+          <h2><span class="icon">&#128200;</span>流量速率实时趋势</h2>
+          <div class="control-bar">
+            <label style="font-size:0.82rem;">选择流：
+              <select id="flowSelect" style="padding:4px 8px;border-radius:4px;border:1px solid var(--border);">
+                <option value="">-- 自动选择第一条 --</option>
+              </select>
+            </label>
+            <span style="font-size:0.75rem;color:var(--text-secondary)">保留最近 60 个数据点</span>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="rateChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 防火墙配置面板 ==================== -->
+    <section class="tab-panel" id="panel-firewall">
+
+      <!-- 添加规则 -->
+      <div class="card">
+        <div class="card-header">
+          <h2><span class="icon">&#10133;</span>添加防火墙规则</h2>
+        </div>
+        <form id="firewallForm" autocomplete="off">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="fwProto">协议类型 *</label>
+              <select id="fwProto" required>
+                <option value="">-- 请选择 --</option>
+                <option value="tcp">TCP</option>
+                <option value="udp">UDP</option>
+                <option value="icmp">ICMP</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="fwSrcAddr">源 IP 地址 *</label>
+              <input type="text" id="fwSrcAddr" placeholder="例：192.168.6.1" required pattern="^(\d{1,3}\.){3}\d{1,3}$">
+              <span class="hint">IPv4 地址格式</span>
+            </div>
+            <div class="form-group">
+              <label for="fwDstAddr">目标 IP 地址 *</label>
+              <input type="text" id="fwDstAddr" placeholder="例：192.168.6.100" required
+                pattern="^(\d{1,3}\.){3}\d{1,3}$">
+              <span class="hint">IPv4 地址格式</span>
+            </div>
+            <div class="form-group">
+              <label for="fwPort">端口号</label>
+              <input type="text" id="fwPort" placeholder="例：80 或 8000-9000">
+              <span class="hint">单个端口或端口范围</span>
+            </div>
+            <div class="form-group">
+              <label for="fwAction">处理动作 *</label>
+              <select id="fwAction" required>
+                <option value="">-- 请选择 --</option>
+                <option value="accept">ACCEPT — 允许通过</option>
+                <option value="drop">DROP — 直接丢弃</option>
+                <option value="reject">REJECT — 拒绝并回应</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">&#9989; 添加规则</button>
+            <button type="reset" class="btn">&#128259; 重置表单</button>
+          </div>
+        </form>
+        <div id="fwAddMsg"></div>
+      </div>
+
+      <!-- 当前规则列表 -->
+      <div class="card">
+        <div class="card-header">
+          <h2><span class="icon">&#128220;</span>当前防火墙规则</h2>
+          <button class="btn btn-sm btn-primary" id="btnRefreshRules">&#128259; 刷新列表</button>
+        </div>
+        <div id="ruleListContainer">
+          <div class="no-data"><span class="big-icon">&#128237;</span>暂无规则<br><small>点击"刷新列表"获取</small></div>
+        </div>
+        <div id="fwListMsg"></div>
+      </div>
+    </section>
+
   </div>
-  <div class="server-status">
-    <span class="status-dot" id="statusDot"></span>
-    <span id="statusText">检测中…</span>
-    <span style="margin-left:12px;opacity:0.7">API: <code id="apiUrl">--</code></span>
-  </div>
-</header>
 
-<div class="container">
+  <!-- ==================== JavaScript ==================== -->
+  <script>
+    (function () {
+      'use strict';
 
-  <!-- ==================== 标签导航 ==================== -->
-  <nav class="tab-nav">
-    <button class="tab-btn active" data-tab="traffic">
-      <span class="tab-icon">&#128202;</span> 流量监控
-    </button>
-    <button class="tab-btn" data-tab="firewall">
-      <span class="tab-icon">&#128737;&#65039;</span> 防火墙配置
-    </button>
-  </nav>
+      /* ----- 配置 ----- */
+      var urlParams = new URLSearchParams(window.location.search);
+      var API_BASE = urlParams.get('api') || 'http://localhost:8080';
+      var REFRESH_INTERVAL = 2000;
+      var MAX_TABLE_ROWS = 30;
+      var MAX_CHART_POINTS = 60;
+      var ROUTER_IP = '192.168.6.100';
 
-  <!-- ==================== 流量监控面板 ==================== -->
-  <section class="tab-panel active" id="panel-traffic">
+      /* ----- DOM 引用 ----- */
+      function $(sel) { return document.querySelector(sel); }
+      function $$(sel) { return document.querySelectorAll(sel); }
 
-    <!-- 统计概览 -->
-    <div class="stat-grid">
-      <div class="stat-card">
-        <span class="stat-label">活跃连接数</span>
-        <span class="stat-value" id="statFlows">0</span>
-        <span class="stat-unit">条数据流</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">累计总流量</span>
-        <span class="stat-value" id="statTotal">0 B</span>
-        <span class="stat-unit">所有流合计</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">峰值速率</span>
-        <span class="stat-value" id="statPeak">0 B/s</span>
-        <span class="stat-unit">全局历史最高</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">最后更新</span>
-        <span class="stat-value" id="statUpdate" style="font-size:1rem;">--</span>
-        <span class="stat-unit">自动刷新中</span>
-      </div>
-    </div>
+      var tabBtns = $$('.tab-btn');
+      var tabPanels = $$('.tab-panel');
+      var statusDot = $('#statusDot');
+      var statusText = $('#statusText');
+      var flowTableBody = $('#flowTableBody');
+      var autoBadge = $('#autoBadge');
+      var btnToggleAuto = $('#btnToggleAuto');
+      var btnRefresh = $('#btnRefresh');
+      var flowSelect = $('#flowSelect');
+      var statFlows = $('#statFlows');
+      var statTotal = $('#statTotal');
+      var statPeak = $('#statPeak');
+      var statUpdate = $('#statUpdate');
+      var firewallForm = $('#firewallForm');
+      var fwAddMsg = $('#fwAddMsg');
+      var fwListMsg = $('#fwListMsg');
+      var ruleListContainer = $('#ruleListContainer');
+      var btnRefreshRules = $('#btnRefreshRules');
 
-    <!-- 数据表格 -->
-    <div class="card">
-      <div class="card-header">
-        <h2><span class="icon">&#128203;</span>实时流量数据表</h2>
-        <div class="control-bar">
-          <span class="auto-badge" id="autoBadge">&#9679; 自动刷新 2s</span>
-          <button class="btn btn-sm" id="btnToggleAuto" title="暂停/恢复自动刷新">&#9199;&#65039; 暂停</button>
-          <button class="btn btn-sm btn-primary" id="btnRefresh" title="立即刷新数据">&#128259; 立即刷新</button>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>方向</th>
-              <th>源 IP:端口</th>
-              <th>目标 IP:端口</th>
-              <th>累计流量</th>
-              <th>2s 速率</th>
-              <th>10s 速率</th>
-              <th>40s 速率</th>
-              <th>历史峰值</th>
-            </tr>
-          </thead>
-          <tbody id="flowTableBody">
-            <tr><td colspan="8" class="no-data"><span class="big-icon">&#128225;</span>等待数据…<br><small>请确保后端 API 已启动</small></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+      /* ----- 工具函数 ----- */
+      function formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        var k = 1024;
+        var sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        var i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      }
 
-    <!-- 图表 -->
-    <div class="card">
-      <div class="card-header">
-        <h2><span class="icon">&#128200;</span>流量速率实时趋势</h2>
-        <div class="control-bar">
-          <label style="font-size:0.82rem;">选择流：
-            <select id="flowSelect" style="padding:4px 8px;border-radius:4px;border:1px solid var(--border);">
-              <option value="">-- 自动选择第一条 --</option>
-            </select>
-          </label>
-          <span style="font-size:0.75rem;color:var(--text-secondary)">保留最近 60 个数据点</span>
-        </div>
-      </div>
-      <div class="chart-container">
-        <canvas id="rateChart"></canvas>
-      </div>
-    </div>
-  </section>
+      function parseRateValue(str) {
+        if (!str) return 0;
+        var match = str.match(/^([\d.]+)\s*(B|KB|MB|GB)\/s$/i);
+        if (!match) return parseFloat(str) || 0;
+        var val = parseFloat(match[1]);
+        var unit = match[2].toUpperCase();
+        var mult = { B: 1, KB: 1024, MB: 1048576, GB: 1073741824 };
+        return val * (mult[unit] || 1);
+      }
 
-  <!-- ==================== 防火墙配置面板 ==================== -->
-  <section class="tab-panel" id="panel-firewall">
+      function parseRateToDisplay(bytesPerSec) {
+        if (bytesPerSec === 0) return '0 B/s';
+        var k = 1024;
+        var sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+        var i = Math.floor(Math.log(bytesPerSec) / Math.log(k));
+        return parseFloat((bytesPerSec / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+      }
 
-    <!-- 添加规则 -->
-    <div class="card">
-      <div class="card-header">
-        <h2><span class="icon">&#10133;</span>添加防火墙规则</h2>
-      </div>
-      <form id="firewallForm" autocomplete="off">
-        <div class="form-grid">
-          <div class="form-group">
-            <label for="fwProto">协议类型 *</label>
-            <select id="fwProto" required>
-              <option value="">-- 请选择 --</option>
-              <option value="tcp">TCP</option>
-              <option value="udp">UDP</option>
-              <option value="icmp">ICMP</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="fwSrcAddr">源 IP 地址 *</label>
-            <input type="text" id="fwSrcAddr" placeholder="例：192.168.6.1" required
-                   pattern="^(\d{1,3}\.){3}\d{1,3}$">
-            <span class="hint">IPv4 地址格式</span>
-          </div>
-          <div class="form-group">
-            <label for="fwDstAddr">目标 IP 地址 *</label>
-            <input type="text" id="fwDstAddr" placeholder="例：192.168.6.100" required
-                   pattern="^(\d{1,3}\.){3}\d{1,3}$">
-            <span class="hint">IPv4 地址格式</span>
-          </div>
-          <div class="form-group">
-            <label for="fwPort">端口号</label>
-            <input type="text" id="fwPort" placeholder="例：80 或 8000-9000">
-            <span class="hint">单个端口或端口范围</span>
-          </div>
-          <div class="form-group">
-            <label for="fwAction">处理动作 *</label>
-            <select id="fwAction" required>
-              <option value="">-- 请选择 --</option>
-              <option value="accept">ACCEPT — 允许通过</option>
-              <option value="drop">DROP — 直接丢弃</option>
-              <option value="reject">REJECT — 拒绝并回应</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">&#9989; 添加规则</button>
-          <button type="reset" class="btn">&#128259; 重置表单</button>
-        </div>
-      </form>
-      <div id="fwAddMsg"></div>
-    </div>
+      function formatTime() {
+        var now = new Date();
+        return now.toLocaleTimeString('zh-CN', { hour12: false });
+      }
 
-    <!-- 当前规则列表 -->
-    <div class="card">
-      <div class="card-header">
-        <h2><span class="icon">&#128220;</span>当前防火墙规则</h2>
-        <button class="btn btn-sm btn-primary" id="btnRefreshRules">&#128259; 刷新列表</button>
-      </div>
-      <div id="ruleListContainer">
-        <div class="no-data"><span class="big-icon">&#128237;</span>暂无规则<br><small>点击"刷新列表"获取</small></div>
-      </div>
-      <div id="fwListMsg"></div>
-    </div>
-  </section>
+      function getDirection(srcIP, dstIP) {
+        if (srcIP === ROUTER_IP) return 'out';
+        if (dstIP === ROUTER_IP) return 'in';
+        return 'internal';
+      }
 
-</div>
+      function getDirectionLabel(dir) {
+        var map = { out: '出站 ↑', 'in': '↓ 入站', internal: '本地 ⇄' };
+        return map[dir] || dir;
+      }
 
-<!-- ==================== JavaScript ==================== -->
-<script>
-(function() {
-  'use strict';
+      function getDirectionClass(dir) {
+        return 'flow-dir ' + dir;
+      }
 
-  /* ----- 配置 ----- */
-  var urlParams = new URLSearchParams(window.location.search);
-  var API_BASE = urlParams.get('api') || 'http://localhost:8080';
-  var REFRESH_INTERVAL = 2000;
-  var MAX_CHART_POINTS = 60;
-  var ROUTER_IP = '192.168.6.100';
+      function isValidIP(ip) {
+        var parts = ip.split('.');
+        if (parts.length !== 4) return false;
+        return parts.every(function (p) {
+          var n = parseInt(p, 10);
+          return n >= 0 && n <= 255 && String(n) === p;
+        });
+      }
 
-  /* ----- DOM 引用 ----- */
-  function $(sel) { return document.querySelector(sel); }
-  function $$(sel) { return document.querySelectorAll(sel); }
-
-  var tabBtns = $$('.tab-btn');
-  var tabPanels = $$('.tab-panel');
-  var statusDot = $('#statusDot');
-  var statusText = $('#statusText');
-  var flowTableBody = $('#flowTableBody');
-  var autoBadge = $('#autoBadge');
-  var btnToggleAuto = $('#btnToggleAuto');
-  var btnRefresh = $('#btnRefresh');
-  var flowSelect = $('#flowSelect');
-  var statFlows = $('#statFlows');
-  var statTotal = $('#statTotal');
-  var statPeak = $('#statPeak');
-  var statUpdate = $('#statUpdate');
-  var firewallForm = $('#firewallForm');
-  var fwAddMsg = $('#fwAddMsg');
-  var fwListMsg = $('#fwListMsg');
-  var ruleListContainer = $('#ruleListContainer');
-  var btnRefreshRules = $('#btnRefreshRules');
-
-  /* ----- 工具函数 ----- */
-  function formatBytes(bytes) {
-    if (bytes === 0) return '0 B';
-    var k = 1024;
-    var sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    var i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  }
-
-  function parseRateValue(str) {
-    if (!str) return 0;
-    var match = str.match(/^([\d.]+)\s*(B|KB|MB|GB)\/s$/i);
-    if (!match) return parseFloat(str) || 0;
-    var val = parseFloat(match[1]);
-    var unit = match[2].toUpperCase();
-    var mult = { B: 1, KB: 1024, MB: 1048576, GB: 1073741824 };
-    return val * (mult[unit] || 1);
-  }
-
-  function parseRateToDisplay(bytesPerSec) {
-    if (bytesPerSec === 0) return '0 B/s';
-    var k = 1024;
-    var sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
-    var i = Math.floor(Math.log(bytesPerSec) / Math.log(k));
-    return parseFloat((bytesPerSec / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  }
-
-  function formatTime() {
-    var now = new Date();
-    return now.toLocaleTimeString('zh-CN', { hour12: false });
-  }
-
-  function getDirection(srcIP, dstIP) {
-    if (srcIP === ROUTER_IP) return 'out';
-    if (dstIP === ROUTER_IP) return 'in';
-    return 'internal';
-  }
-
-  function getDirectionLabel(dir) {
-    var map = { out: '出站 ↑', 'in': '↓ 入站', internal: '本地 ⇄' };
-    return map[dir] || dir;
-  }
-
-  function getDirectionClass(dir) {
-    return 'flow-dir ' + dir;
-  }
-
-  function isValidIP(ip) {
-    var parts = ip.split('.');
-    if (parts.length !== 4) return false;
-    return parts.every(function(p) {
-      var n = parseInt(p, 10);
-      return n >= 0 && n <= 255 && String(n) === p;
-    });
-  }
-
-  /* ----- 标签页切换 ----- */
-  tabBtns.forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var target = btn.dataset.tab;
-      tabBtns.forEach(function(b) { b.classList.remove('active'); });
-      btn.classList.add('active');
-      tabPanels.forEach(function(p) { p.classList.remove('active'); });
-      var panel = document.getElementById('panel-' + target);
-      if (panel) panel.classList.add('active');
-      if (target === 'firewall') loadFirewallRules();
-    });
-  });
-
-  /* ----- 服务状态检测 ----- */
-  function checkServerStatus() {
-    return fetch(API_BASE + '/api/stats', { signal: AbortSignal.timeout(3000) })
-      .then(function(res) {
-        if (res.ok) {
-          statusDot.classList.add('connected');
-          statusText.textContent = '已连接';
-          return true;
-        }
-        throw new Error('Bad response');
-      })
-      .catch(function() {
-        statusDot.classList.remove('connected');
-        statusText.textContent = '未连接';
-        return false;
+      /* ----- 标签页切换 ----- */
+      tabBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var target = btn.dataset.tab;
+          tabBtns.forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          tabPanels.forEach(function (p) { p.classList.remove('active'); });
+          var panel = document.getElementById('panel-' + target);
+          if (panel) panel.classList.add('active');
+          if (target === 'firewall') loadFirewallRules();
+        });
       });
-  }
 
-  /* ----- 流量数据获取与渲染 ----- */
-  var previousFlows = new Set();
-
-  function fetchAndRender() {
-    return fetch(API_BASE + '/api/stats')
-      .then(function(res) {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.json();
-      })
-      .then(function(data) {
-        renderStats(data.flows || []);
-        updateChartData(data.flows || []);
-        statusDot.classList.add('connected');
-        statusText.textContent = '已连接';
-      })
-      .catch(function(e) {
-        console.warn('获取流量数据失败:', e.message);
-        statusDot.classList.remove('connected');
-        statusText.textContent = '连接失败';
-      });
-  }
-
-  function renderStats(flows) {
-    var count = flows.length;
-    var totalBytes = 0, globalPeak = 0;
-    var currentFlows = new Set();
-
-    flows.forEach(function(f) {
-      totalBytes += parseInt(f.total) || 0;
-      currentFlows.add(f.src + '->' + f.dst);
-      var peak = parseRateValue(f.max);
-      if (peak > globalPeak) globalPeak = peak;
-    });
-
-    statFlows.textContent = count;
-    statTotal.textContent = formatBytes(totalBytes);
-    statPeak.textContent = parseRateToDisplay(globalPeak);
-    statUpdate.textContent = formatTime();
-
-    if (flows.length === 0) {
-      flowTableBody.innerHTML = '<tr><td colspan="8" class="no-data"><span class="big-icon">&#128225;</span>暂无数据<br><small>等待 OpenWrt 上的 monitor 程序产生数据…</small></td></tr>';
-    } else {
-      flowTableBody.innerHTML = flows.map(function(f) {
-        var srcIP = f.src.split(':')[0];
-        var dstIP = f.dst.split(':')[0];
-        var dir = getDirection(srcIP, dstIP);
-        var key = f.src + '->' + f.dst;
-        var isNew = !previousFlows.has(key) && previousFlows.size > 0 ? ' class="new-row"' : '';
-        return '<tr' + isNew + '>' +
-          '<td><span class="' + getDirectionClass(dir) + '">' + getDirectionLabel(dir) + '</span></td>' +
-          '<td>' + f.src + '</td>' +
-          '<td>' + f.dst + '</td>' +
-          '<td>' + formatBytes(parseInt(f.total) || 0) + '</td>' +
-          '<td>' + (f.rate_2s || '0 B/s') + '</td>' +
-          '<td>' + (f.rate_10s || '0 B/s') + '</td>' +
-          '<td>' + (f.rate_40s || '0 B/s') + '</td>' +
-          '<td><strong>' + (f.max || '0 B/s') + '</strong></td>' +
-          '</tr>';
-      }).join('');
-    }
-
-    previousFlows = currentFlows;
-
-    var currentVal = flowSelect.value;
-    flowSelect.innerHTML = '<option value="">-- 自动选择第一条 --</option>';
-    flows.forEach(function(f, i) {
-      flowSelect.innerHTML += '<option value="' + i + '">' + f.src + ' → ' + f.dst + '</option>';
-    });
-    if (currentVal && parseInt(currentVal) < flows.length) {
-      flowSelect.value = currentVal;
-    }
-  }
-
-  /* ----- 图表 (Chart.js) ----- */
-  var rateChart = null;
-
-  function initChart() {
-    var ctx = document.getElementById('rateChart');
-    if (!ctx || typeof Chart === 'undefined') return;
-    rateChart = new Chart(ctx.getContext('2d'), {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [
-          {
-            label: '2s 速率',
-            data: [],
-            borderColor: '#1a73e8',
-            backgroundColor: 'rgba(26,115,232,0.08)',
-            fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2
-          },
-          {
-            label: '10s 速率',
-            data: [],
-            borderColor: '#e8710a',
-            backgroundColor: 'rgba(232,113,10,0.05)',
-            fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5,
-            borderDash: [6, 3]
-          },
-          {
-            label: '40s 速率',
-            data: [],
-            borderColor: '#7b1fa2',
-            backgroundColor: 'rgba(123,31,162,0.04)',
-            fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5,
-            borderDash: [2, 4]
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { position: 'top', labels: { usePointStyle: true, padding: 20 } },
-          tooltip: {
-            callbacks: {
-              label: function(ctx) {
-                return ctx.dataset.label + ': ' + parseRateToDisplay(ctx.parsed.y);
-              }
+      /* ----- 服务状态检测 ----- */
+      function checkServerStatus() {
+        return fetch(API_BASE + '/api/stats', { signal: AbortSignal.timeout(3000) })
+          .then(function (res) {
+            if (res.ok) {
+              statusDot.classList.add('connected');
+              statusText.textContent = '已连接';
+              return true;
             }
-          }
-        },
-        scales: {
-          x: {
-            display: true,
-            title: { display: true, text: '时间', color: '#5f6368' },
-            ticks: { maxTicksLimit: 10, maxRotation: 0 }
-          },
-          y: {
-            display: true,
-            title: { display: true, text: '速率', color: '#5f6368' },
-            ticks: { callback: function(v) { return parseRateToDisplay(v); } }
-          }
-        },
-        animation: { duration: 300 }
+            throw new Error('Bad response');
+          })
+          .catch(function () {
+            statusDot.classList.remove('connected');
+            statusText.textContent = '未连接';
+            return false;
+          });
       }
-    });
-  }
 
-  function updateChartData(flows) {
-    if (!rateChart) return;
-    var now = formatTime();
+      /* ----- 流量数据获取与渲染 ----- */
+      var previousFlows = new Set();
 
-    var selectedFlow = null;
-    var selIndex = flowSelect.value;
-    if (selIndex !== '' && flows[parseInt(selIndex)]) {
-      selectedFlow = flows[parseInt(selIndex)];
-    } else if (flows.length > 0) {
-      selectedFlow = flows[0];
-    }
+      function fetchAndRender() {
+        return fetch(API_BASE + '/api/stats')
+          .then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+          })
+          .then(function (data) {
+            renderStats(data.flows || []);
+            updateChartData(data.flows || []);
+            statusDot.classList.add('connected');
+            statusText.textContent = '已连接';
+          })
+          .catch(function (e) {
+            console.warn('获取流量数据失败:', e.message);
+            statusDot.classList.remove('connected');
+            statusText.textContent = '连接失败';
+          });
+      }
 
-    var r2 = 0, r10 = 0, r40 = 0;
-    if (selectedFlow) {
-      r2 = parseRateValue(selectedFlow.rate_2s);
-      r10 = parseRateValue(selectedFlow.rate_10s);
-      r40 = parseRateValue(selectedFlow.rate_40s);
-    }
+      function renderStats(flows) {
+        var totalCount = flows.length;
 
-    rateChart.data.labels.push(now);
-    rateChart.data.datasets[0].data.push(r2);
-    rateChart.data.datasets[1].data.push(r10);
-    rateChart.data.datasets[2].data.push(r40);
+        // Sort by 2s rate descending, take top N for display
+        var displayFlows = flows.slice().sort(function (a, b) {
+          return parseRateValue(b.rate_2s) - parseRateValue(a.rate_2s);
+        });
+        var trimmed = displayFlows.slice(0, MAX_TABLE_ROWS);
 
-    while (rateChart.data.labels.length > MAX_CHART_POINTS) {
-      rateChart.data.labels.shift();
-      rateChart.data.datasets.forEach(function(ds) { ds.data.shift(); });
-    }
-    rateChart.update('none');
-  }
+        var totalBytes = 0, globalPeak = 0;
+        var currentFlows = new Set();
 
-  /* ----- 自动刷新控制 ----- */
-  var autoRefreshTimer = null;
-  var isAutoRefreshing = true;
+        flows.forEach(function (f) {
+          totalBytes += parseInt(f.total) || 0;
+          currentFlows.add(f.src + '->' + f.dst);
+          var peak = parseRateValue(f.max);
+          if (peak > globalPeak) globalPeak = peak;
+        });
 
-  function startAutoRefresh() {
-    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
-    autoRefreshTimer = setInterval(fetchAndRender, REFRESH_INTERVAL);
-    isAutoRefreshing = true;
-    autoBadge.textContent = '● 自动刷新 ' + (REFRESH_INTERVAL / 1000) + 's';
-    autoBadge.classList.remove('stopped');
-    btnToggleAuto.innerHTML = '⏯️ 暂停';
-  }
+        statFlows.textContent = totalCount;
+        statTotal.textContent = formatBytes(totalBytes);
+        statPeak.textContent = parseRateToDisplay(globalPeak);
+        statUpdate.textContent = formatTime();
 
-  function stopAutoRefresh() {
-    if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
-    isAutoRefreshing = false;
-    autoBadge.textContent = '● 已暂停';
-    autoBadge.classList.add('stopped');
-    btnToggleAuto.innerHTML = '▶️ 恢复';
-  }
-
-  btnToggleAuto.addEventListener('click', function() {
-    if (isAutoRefreshing) stopAutoRefresh();
-    else startAutoRefresh();
-  });
-
-  btnRefresh.addEventListener('click', fetchAndRender);
-
-  flowSelect.addEventListener('change', function() {
-    if (rateChart) {
-      rateChart.data.labels = [];
-      rateChart.data.datasets.forEach(function(ds) { ds.data = []; });
-      rateChart.update();
-    }
-    fetchAndRender();
-  });
-
-  /* ----- 防火墙规则管理 ----- */
-  function loadFirewallRules() {
-    ruleListContainer.innerHTML = '<div class="no-data">⏳ 加载中…</div>';
-    fwListMsg.innerHTML = '';
-    return fetch(API_BASE + '/api/firewall/list')
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        if (data.ok && data.stdout) {
-          renderRuleList(data.stdout);
-        } else if (data.ok && !data.stdout) {
-          ruleListContainer.innerHTML = '<div class="no-data"><span class="big-icon">&#128237;</span>暂无防火墙规则<br><small>请添加一条规则</small></div>';
+        if (trimmed.length === 0) {
+          flowTableBody.innerHTML = '<tr><td colspan="8" class="no-data"><span class="big-icon">&#128225;</span>暂无数据<br><small>等待 OpenWrt 上的 monitor 程序产生数据…</small></td></tr>';
         } else {
-          showMessage(fwListMsg, 'error', '获取规则失败：' + (data.stderr || data.error || '未知错误'));
-          ruleListContainer.innerHTML = '<div class="no-data"><span class="big-icon">⚠️</span>加载失败</div>';
+          flowTableBody.innerHTML = trimmed.map(function (f) {
+            var srcIP = f.src.split(':')[0];
+            var dstIP = f.dst.split(':')[0];
+            var dir = getDirection(srcIP, dstIP);
+            var key = f.src + '->' + f.dst;
+            var isNew = !previousFlows.has(key) && previousFlows.size > 0 ? ' class="new-row"' : '';
+            return '<tr' + isNew + '>' +
+              '<td><span class="' + getDirectionClass(dir) + '">' + getDirectionLabel(dir) + '</span></td>' +
+              '<td>' + f.src + '</td>' +
+              '<td>' + f.dst + '</td>' +
+              '<td>' + formatBytes(parseInt(f.total) || 0) + '</td>' +
+              '<td>' + (f.rate_2s || '0 B/s') + '</td>' +
+              '<td>' + (f.rate_10s || '0 B/s') + '</td>' +
+              '<td>' + (f.rate_40s || '0 B/s') + '</td>' +
+              '<td><strong>' + (f.max || '0 B/s') + '</strong></td>' +
+              '</tr>';
+          }).join('');
+          if (totalCount > MAX_TABLE_ROWS) {
+            flowTableBody.innerHTML += '<tr><td colspan="8" style="text-align:center;color:var(--text-secondary);font-size:0.8rem;padding:8px">… 还有 ' + (totalCount - MAX_TABLE_ROWS) + ' 条流未显示（按速率排序，仅展示前 ' + MAX_TABLE_ROWS + ' 条）</td></tr>';
+          }
         }
-      })
-      .catch(function(e) {
-        showMessage(fwListMsg, 'error', '无法连接后端：' + e.message);
-        ruleListContainer.innerHTML = '<div class="no-data"><span class="big-icon">⚠️</span>无法连接后端</div>';
+
+        previousFlows = currentFlows;
+
+        var currentVal = flowSelect.value;
+        flowSelect.innerHTML = '<option value="">-- 自动选择最活跃流 (' + totalCount + '条流) --</option>';
+        trimmed.forEach(function (f, i) {
+          flowSelect.innerHTML += '<option value="' + i + '">' + f.src + ' → ' + f.dst + ' (' + (f.rate_2s || '0') + ')</option>';
+        });
+        // Auto-select flow with highest 2s rate
+        if (!currentVal && trimmed.length > 0) {
+          flowSelect.value = '0';  // First item is already the most active
+        } else if (currentVal && parseInt(currentVal) < trimmed.length) {
+          flowSelect.value = currentVal;
+        }
+      }
+
+      /* ----- 图表 (Chart.js) ----- */
+      var rateChart = null;
+
+      function initChart() {
+        var ctx = document.getElementById('rateChart');
+        if (!ctx || typeof Chart === 'undefined') return;
+        rateChart = new Chart(ctx.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: '2s 速率',
+                data: [],
+                borderColor: '#1a73e8',
+                backgroundColor: 'rgba(26,115,232,0.08)',
+                fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2
+              },
+              {
+                label: '10s 速率',
+                data: [],
+                borderColor: '#e8710a',
+                backgroundColor: 'rgba(232,113,10,0.05)',
+                fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5,
+                borderDash: [6, 3]
+              },
+              {
+                label: '40s 速率',
+                data: [],
+                borderColor: '#7b1fa2',
+                backgroundColor: 'rgba(123,31,162,0.04)',
+                fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5,
+                borderDash: [2, 4]
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { position: 'top', labels: { usePointStyle: true, padding: 20 } },
+              tooltip: {
+                callbacks: {
+                  label: function (ctx) {
+                    return ctx.dataset.label + ': ' + parseRateToDisplay(ctx.parsed.y);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                display: true,
+                title: { display: true, text: '时间', color: '#5f6368' },
+                ticks: { maxTicksLimit: 10, maxRotation: 0 }
+              },
+              y: {
+                display: true,
+                title: { display: true, text: '速率', color: '#5f6368' },
+                ticks: { callback: function (v) { return parseRateToDisplay(v); } }
+              }
+            },
+            animation: { duration: 300 }
+          }
+        });
+      }
+
+      function updateChartData(flows) {
+        if (!rateChart) return;
+        var now = formatTime();
+
+        // Sort same way as renderStats
+        var sorted = flows.slice().sort(function (a, b) {
+          return parseRateValue(b.rate_2s) - parseRateValue(a.rate_2s);
+        });
+        var trimmed = sorted.slice(0, MAX_TABLE_ROWS);
+
+        var selectedFlow = null;
+        var selIndex = flowSelect.value;
+        if (selIndex !== '' && trimmed[parseInt(selIndex)]) {
+          selectedFlow = trimmed[parseInt(selIndex)];
+        } else if (trimmed.length > 0) {
+          selectedFlow = trimmed[0];
+          flowSelect.value = '0';
+        }
+
+        var r2 = 0, r10 = 0, r40 = 0;
+        if (selectedFlow) {
+          r2 = parseRateValue(selectedFlow.rate_2s);
+          r10 = parseRateValue(selectedFlow.rate_10s);
+          r40 = parseRateValue(selectedFlow.rate_40s);
+        }
+
+        rateChart.data.labels.push(now);
+        rateChart.data.datasets[0].data.push(r2);
+        rateChart.data.datasets[1].data.push(r10);
+        rateChart.data.datasets[2].data.push(r40);
+
+        while (rateChart.data.labels.length > MAX_CHART_POINTS) {
+          rateChart.data.labels.shift();
+          rateChart.data.datasets.forEach(function (ds) { ds.data.shift(); });
+        }
+        rateChart.update('none');
+      }
+
+      /* ----- 自动刷新控制 ----- */
+      var autoRefreshTimer = null;
+      var isAutoRefreshing = true;
+
+      function startAutoRefresh() {
+        if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+        autoRefreshTimer = setInterval(fetchAndRender, REFRESH_INTERVAL);
+        isAutoRefreshing = true;
+        autoBadge.textContent = '● 自动刷新 ' + (REFRESH_INTERVAL / 1000) + 's';
+        autoBadge.classList.remove('stopped');
+        btnToggleAuto.innerHTML = '⏯️ 暂停';
+      }
+
+      function stopAutoRefresh() {
+        if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+        isAutoRefreshing = false;
+        autoBadge.textContent = '● 已暂停';
+        autoBadge.classList.add('stopped');
+        btnToggleAuto.innerHTML = '▶️ 恢复';
+      }
+
+      btnToggleAuto.addEventListener('click', function () {
+        if (isAutoRefreshing) stopAutoRefresh();
+        else startAutoRefresh();
       });
-  }
 
-  function renderRuleList(stdout) {
-    var lines = stdout.split('\n').filter(function(l) { return l.trim(); });
-    if (lines.length === 0) {
-      ruleListContainer.innerHTML = '<div class="no-data"><span class="big-icon">&#128237;</span>暂无防火墙规则</div>';
-      return;
-    }
-    ruleListContainer.innerHTML = lines.map(function(line, i) {
-      var ruleId = i + 1;
-      return '<div class="rule-card">' +
-        '<div class="rule-info">' +
-        '<span class="rule-id">#' + ruleId + '</span>' +
-        '<span class="rule-text">' + escapeHtml(line) + '</span>' +
-        '</div>' +
-        '<button class="btn btn-sm btn-danger" onclick="deleteRule(\'' + ruleId + '\')">' +
-        '&#128465;&#65039; 删除</button>' +
-        '</div>';
-    }).join('');
-  }
+      btnRefresh.addEventListener('click', fetchAndRender);
 
-  function escapeHtml(str) {
-    var div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
-
-  /* ----- 删除规则 (全局函数) ----- */
-  window.deleteRule = function(ruleId) {
-    if (!confirm('确认删除规则 #' + ruleId + ' ？此操作不可撤销。')) return;
-    fwListMsg.innerHTML = '';
-    fetch(API_BASE + '/api/firewall/del', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rule_id: ruleId })
-    })
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
-      if (data.ok) {
-        showMessage(fwListMsg, 'success', '✅ 规则 #' + ruleId + ' 已删除');
-        loadFirewallRules();
-      } else {
-        showMessage(fwListMsg, 'error', '删除失败：' + (data.stderr || data.error || '未知错误'));
-      }
-    })
-    .catch(function(e) {
-      showMessage(fwListMsg, 'error', '请求失败：' + e.message);
-    });
-  };
-
-  function showMessage(container, type, text) {
-    var icons = { success: '✅', error: '❌', info: 'ℹ️' };
-    container.innerHTML = '<div class="message ' + type + '">' +
-      '<span class="msg-icon">' + (icons[type] || '') + '</span>' +
-      '<span>' + text + '</span></div>';
-    setTimeout(function() { if (container) container.innerHTML = ''; }, 8000);
-  }
-
-  /* ----- 添加防火墙规则 ----- */
-  firewallForm.addEventListener('submit', function(e) {
-    e.preventDefault();
-    fwAddMsg.innerHTML = '';
-
-    var proto = $('#fwProto').value.trim();
-    var src_addr = $('#fwSrcAddr').value.trim();
-    var dst_addr = $('#fwDstAddr').value.trim();
-    var port = $('#fwPort').value.trim();
-    var action = $('#fwAction').value.trim();
-
-    if (!proto || !src_addr || !dst_addr || !action) {
-      showMessage(fwAddMsg, 'error', '请填写所有必填字段（协议、源地址、目标地址、处理动作）');
-      return;
-    }
-    if (!isValidIP(src_addr)) {
-      showMessage(fwAddMsg, 'error', '源 IP 地址格式无效：' + src_addr);
-      return;
-    }
-    if (!isValidIP(dst_addr)) {
-      showMessage(fwAddMsg, 'error', '目标 IP 地址格式无效：' + dst_addr);
-      return;
-    }
-
-    var payload = { proto: proto, src_addr: src_addr, dst_addr: dst_addr, port: port, action: action };
-
-    fetch(API_BASE + '/api/firewall/add', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
-      if (data.ok) {
-        showMessage(fwAddMsg, 'success',
-          '✅ 规则添加成功！<br><small>' + escapeHtml(data.stdout || '') + '</small>');
-        firewallForm.reset();
-        loadFirewallRules();
-      } else {
-        showMessage(fwAddMsg, 'error',
-          '添加失败：' + (data.stderr || data.error || '未知错误'));
-      }
-    })
-    .catch(function(e) {
-      showMessage(fwAddMsg, 'error', '请求失败，请检查后端是否运行：' + e.message);
-    });
-  });
-
-  btnRefreshRules.addEventListener('click', loadFirewallRules);
-
-  /* ----- 启动 ----- */
-  function init() {
-    document.getElementById('apiUrl').textContent = API_BASE;
-    initChart();
-    checkServerStatus().then(function(connected) {
-      if (connected) {
+      flowSelect.addEventListener('change', function () {
+        if (rateChart) {
+          rateChart.data.labels = [];
+          rateChart.data.datasets.forEach(function (ds) { ds.data = []; });
+          rateChart.update();
+        }
         fetchAndRender();
-        startAutoRefresh();
-      } else {
-        statUpdate.textContent = '未连接';
-        stopAutoRefresh();
+      });
+
+      /* ----- 防火墙规则管理 ----- */
+      function loadFirewallRules() {
+        ruleListContainer.innerHTML = '<div class="no-data">⏳ 加载中…</div>';
+        fwListMsg.innerHTML = '';
+        return fetch(API_BASE + '/api/firewall/list')
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (data.ok && data.stdout) {
+              renderRuleList(data.stdout);
+            } else if (data.ok && !data.stdout) {
+              ruleListContainer.innerHTML = '<div class="no-data"><span class="big-icon">&#128237;</span>暂无防火墙规则<br><small>请添加一条规则</small></div>';
+            } else {
+              showMessage(fwListMsg, 'error', '获取规则失败：' + (data.stderr || data.error || '未知错误'));
+              ruleListContainer.innerHTML = '<div class="no-data"><span class="big-icon">⚠️</span>加载失败</div>';
+            }
+          })
+          .catch(function (e) {
+            showMessage(fwListMsg, 'error', '无法连接后端：' + e.message);
+            ruleListContainer.innerHTML = '<div class="no-data"><span class="big-icon">⚠️</span>无法连接后端</div>';
+          });
       }
-    });
-  }
 
-  init();
+      // 解析 iptables --line-numbers 输出，提取真实规则编号
+      var RULE_LINE_RE = /^\s*(\d+)\s+/;
 
-})();
-</script>
+      function parseFirewallLines(stdout) {
+        var lines = stdout.split('\n').filter(function(l) { return l.trim(); });
+    var items = [];
+        lines.forEach(function (line) {
+          var match = line.match(RULE_LINE_RE);
+          if (match) {
+            items.push({ ruleId: match[1], text: line, isRule: true });
+          } else {
+            items.push({ ruleId: null, text: line, isRule: false });
+          }
+        });
+        return items;
+      }
+
+      function renderRuleList(stdout) {
+        var items = parseFirewallLines(stdout);
+        if (items.length === 0) {
+          ruleListContainer.innerHTML = '<div class="no-data"><span class="big-icon">&#128237;</span>暂无防火墙规则</div>';
+          return;
+        }
+        ruleListContainer.innerHTML = items.map(function (item) {
+          if (item.isRule) {
+            return '<div class="rule-card">' +
+              '<div class="rule-info">' +
+              '<span class="rule-id">#' + item.ruleId + '</span>' +
+              '<span class="rule-text">' + escapeHtml(item.text) + '</span>' +
+              '</div>' +
+              '<button class="btn btn-sm btn-danger" onclick="deleteRule(\'' + item.ruleId + '\')">' +
+                '&#128465;&#65039; 删除</button>' +
+                '</div>';
+          } else {
+            return '<div class="rule-card" style="background:#f8f9fa;border-color:#e0e0e0;">' +
+              '<div class="rule-info">' +
+              '<span class="rule-text" style="color:var(--text-secondary);font-style:italic;">' +
+              escapeHtml(item.text) + '</span>' +
+              '</div></div>';
+          }
+        }).join('');
+      }
+
+      function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      /* ----- 删除规则 (全局函数) ----- */
+      window.deleteRule = function (ruleId) {
+        if (!confirm('确认删除规则 #' + ruleId + ' ？此操作不可撤销。')) return;
+        fwListMsg.innerHTML = '';
+        fetch(API_BASE + '/api/firewall/del', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rule_id: ruleId })
+        })
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              showMessage(fwListMsg, 'success', '✅ 规则 #' + ruleId + ' 已删除');
+              loadFirewallRules();
+            } else {
+              showMessage(fwListMsg, 'error', '删除失败：' + (data.stderr || data.error || '未知错误'));
+            }
+          })
+          .catch(function (e) {
+            showMessage(fwListMsg, 'error', '请求失败：' + e.message);
+          });
+      };
+
+      function showMessage(container, type, text) {
+        var icons = { success: '✅', error: '❌', info: 'ℹ️' };
+        container.innerHTML = '<div class="message ' + type + '">' +
+          '<span class="msg-icon">' + (icons[type] || '') + '</span>' +
+          '<span>' + text + '</span></div>';
+        setTimeout(function () { if (container) container.innerHTML = ''; }, 8000);
+      }
+
+      /* ----- 添加防火墙规则 ----- */
+      firewallForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        fwAddMsg.innerHTML = '';
+
+        var proto = $('#fwProto').value.trim();
+        var src_addr = $('#fwSrcAddr').value.trim();
+        var dst_addr = $('#fwDstAddr').value.trim();
+        var port = $('#fwPort').value.trim();
+        var action = $('#fwAction').value.trim();
+
+        if (!proto || !src_addr || !dst_addr || !action) {
+          showMessage(fwAddMsg, 'error', '请填写所有必填字段（协议、源地址、目标地址、处理动作）');
+          return;
+        }
+        if (!isValidIP(src_addr)) {
+          showMessage(fwAddMsg, 'error', '源 IP 地址格式无效：' + src_addr);
+          return;
+        }
+        if (!isValidIP(dst_addr)) {
+          showMessage(fwAddMsg, 'error', '目标 IP 地址格式无效：' + dst_addr);
+          return;
+        }
+
+        var payload = { proto: proto, src_addr: src_addr, dst_addr: dst_addr, port: port, action: action };
+
+        fetch(API_BASE + '/api/firewall/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              showMessage(fwAddMsg, 'success',
+                '✅ 规则添加成功！<br><small>' + escapeHtml(data.stdout || '') + '</small>');
+              firewallForm.reset();
+              loadFirewallRules();
+            } else {
+              showMessage(fwAddMsg, 'error',
+                '添加失败：' + (data.stderr || data.error || '未知错误'));
+            }
+          })
+          .catch(function (e) {
+            showMessage(fwAddMsg, 'error', '请求失败，请检查后端是否运行：' + e.message);
+          });
+      });
+
+      btnRefreshRules.addEventListener('click', loadFirewallRules);
+
+      /* ----- 启动 ----- */
+      function init() {
+        document.getElementById('apiUrl').textContent = API_BASE;
+        initChart();
+        checkServerStatus().then(function (connected) {
+          if (connected) {
+            fetchAndRender();
+            startAutoRefresh();
+          } else {
+            statUpdate.textContent = '未连接';
+            stopAutoRefresh();
+          }
+        });
+      }
+
+      init();
+
+    })();
+  </script>
 
 </body>
+
 </html>
